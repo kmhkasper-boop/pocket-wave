@@ -1,9 +1,14 @@
 'use strict';
-const APP_VERSION='v2';
+const APP_VERSION='v3';
 (()=>{const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];const uid=()=>Math.random().toString(36).slice(2,10);
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',2200)};
 const AC=window.AudioContext||window.webkitAudioContext;let ctx=null,master=null;
-function audio(){if(!ctx){ctx=new AC();master=ctx.createGain();master.gain.value=0.9;master.connect(ctx.destination);}if(ctx.state!=='running')ctx.resume();return ctx;}
+let badSince=0;
+function audio(){if(ctx&&ctx.state!=='running'&&badSince&&performance.now()-badSince>1500&&!document.hidden){try{ctx.close()}catch(e){}ctx=null;badSince=0;}
+ if(!ctx){ctx=new AC();master=ctx.createGain();master.gain.value=0.9;master.connect(ctx.destination);ctx.onstatechange=()=>{if(!ctx)return;if(ctx.state==='running')badSince=0;else if(ctx.state!=='closed'){badSince=badSince||performance.now();ctx.resume().catch(()=>{});}};}
+ if(ctx.state!=='running'){badSince=badSince||performance.now();ctx.resume().catch(()=>{});}return ctx;}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ctx)ctx.resume().catch(()=>{});});
+document.addEventListener('pointerdown',()=>{if(ctx&&ctx.state!=='running')audio();},{capture:true});
 document.addEventListener('pointerdown',()=>{const c=audio();const b=c.createBuffer(1,1,22050),s=c.createBufferSource();s.buffer=b;s.connect(c.destination);s.start(0);},{once:true,capture:true});
 const fresh=()=>({name:'Untitled',bpm:100,recs:[],multi:{tracks:[],clips:[]}});let S=fresh();const samples={};
 function decode(ab){audio();return new Promise((res,rej)=>{const p=ctx.decodeAudioData(ab,res,rej);if(p&&p.then)p.then(res,rej);});}
@@ -26,7 +31,7 @@ $('#rec').onclick=async()=>{const btn=$('#rec');audio();if(mr&&mr.state==='recor
  try{const dev=$('#inputSel').value;stream=await navigator.mediaDevices.getUserMedia({audio:{deviceId:dev?{exact:dev}:undefined,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){return toast('Mic blocked: '+e.message);}
  listInputs();chunks=[];const mime=['audio/webm;codecs=opus','audio/mp4','audio/webm','audio/ogg'].find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m));
  mr=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);mr.ondataavailable=e=>e.data.size&&chunks.push(e.data);
- mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());btn.classList.remove('on');btn.textContent='● Rec';
+ mr.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());stream=null;audio();btn.classList.remove('on');btn.textContent='● Rec';
   try{const buf=await decode(await new Blob(chunks,{type:mr.mimeType}).arrayBuffer());const id=uid(),name='Rec '+(S.recs.length+1);samples[id]=buf;S.recs.push({id,name});
    PNWave.setBuf(buf,name);toast('Recorded '+buf.duration.toFixed(1)+'s → opened in Wave');renderRecs();PNWave.refresh();}catch(e){toast('Decode failed: '+e.message);}};
  mr.start(100);btn.classList.add('on');btn.textContent='■ Stop';};
