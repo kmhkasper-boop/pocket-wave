@@ -1,4 +1,5 @@
 'use strict';
+const APP_VERSION='v2';
 (()=>{const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];const uid=()=>Math.random().toString(36).slice(2,10);
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',2200)};
 const AC=window.AudioContext||window.webkitAudioContext;let ctx=null,master=null;
@@ -56,5 +57,8 @@ async function listProjects(){const box=$('#projList');let all=[];try{all=await 
 const b64=async blob=>{const u=new Uint8Array(await blob.arrayBuffer());let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);};
 $('#projExport').onclick=async()=>{const {st,smp}=snapshot();const o={};for(const k in smp)o[k]=await b64(wavBlob(smp[k]));await download(new Blob([JSON.stringify({app:'pocket-wave',version:1,state:st,samples:o})],{type:'application/json'}),(S.name||'session').replace(/\W+/g,'_')+'.pocketwave.json');};
 $('#projImport').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(j.app!=='pocket-wave')throw new Error('Not a Pocket Wave session');const smp={};for(const k in j.samples){const bin=atob(j.samples[k]),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);smp[k]=await decode(u.buffer);}load(j.state,smp);toast('Imported "'+S.name+'"');}catch(err){toast('Import failed: '+err.message);}e.target.value='';};
-if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator&&location.protocol!=='file:'){const hadCtl=!!navigator.serviceWorker.controller;let reloaded=false;
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!hadCtl||reloaded)return;reloaded=true;if(mr&&mr.state==='recording'){toast('Update ready – tap here to reload');$('#toast').onclick=()=>location.reload();$('#toast').style.pointerEvents='auto';clearTimeout(toast.t);}else location.reload();});
+ navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>{r.update();document.addEventListener('visibilitychange',()=>{if(!document.hidden)r.update();});}).catch(()=>{});}
+$('#appVer').textContent='Pocket Wave '+APP_VERSION;
 })();
